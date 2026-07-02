@@ -155,8 +155,8 @@ function startChargeVibe() {
   stopChargeVibe();
   vibeTimer = setInterval(() => {
     const power = Math.min(1, (performance.now() - chargeStart) / CHARGE_MS);
-    vibe(Math.round(8 + power * 42)); // 蓄力越满，脉冲越长，震感越强
-  }, 90);
+    vibe(Math.round(20 + power * 90)); // 蓄力越满，脉冲越长，满蓄力时接近持续强震
+  }, 110);
 }
 function stopChargeVibe() {
   if (vibeTimer) { clearInterval(vibeTimer); vibeTimer = null; }
@@ -371,7 +371,7 @@ function jump(power) {
   chick.flip = dz > dx;
   chick.squash = -0.28; // 起跳拉伸
   sfx('jump');
-  vibe(25);
+  vibe(60);
   hintEl.classList.add('hidden');
 }
 function land() {
@@ -396,7 +396,7 @@ function land() {
       chick.tx = p.x; chick.tz = p.z; // 吸附到平台正中心
       popups.push({ x: p.x, z: p.z, t: 0, dy: 28, color: '#ff5f8f', text: PERFECT_TEXTS[(Math.random() * PERFECT_TEXTS.length) | 0] });
       sfx('perfect');
-      vibe([20, 30, 45]);
+      vibe([40, 50, 90]);
     } else {
       combo = 0;
       gain = crossed;
@@ -411,7 +411,7 @@ function land() {
         chick.tz = Math.max(p.z - inset, Math.min(p.z + inset, chick.z));
       }
       sfx('land');
-      vibe(15);
+      vibe(40);
     }
     score += gain;
     popups.push({ x: chick.x, z: chick.z, t: 0, dy: 0, color: d < 7 ? '#f7b500' : '#5a6b8c', text: '+' + gain });
@@ -426,7 +426,7 @@ function land() {
     streak = 0;
     chick.tx = chick.x; chick.tz = chick.z;
     sfx('land');
-    vibe(15);
+    vibe(40);
   }
   updateHUD();
 }
@@ -438,7 +438,7 @@ function die() {
   combo = 0;
   streak = 0;
   sfx('fall');
-  vibe([90, 60, 120]);
+  vibe([150, 80, 220]);
   updateHUD();
 }
 function doRevive() {
@@ -451,7 +451,7 @@ function doRevive() {
   });
   popups.push({ x: p.x, z: p.z, t: 0, dy: 40, color: '#2ecc71', text: '🐣 复活！继续跳！' });
   sfxBonus();
-  vibe([30, 60, 30]);
+  vibe([70, 90, 70]);
   updateHUD();
 }
 
@@ -471,7 +471,7 @@ function triggerGanma() {
   ganmaT = 0;
   shakeT = 0.7;
   sfxGanma();
-  vibe([50, 40, 50, 40, 80]);
+  vibe([100, 50, 100, 50, 180]);
 }
 function sfxGanma() {
   if (muted) return;
@@ -484,7 +484,7 @@ function trigger666() {
   revives++;
   six6T = 0;
   sfx666();
-  vibe([30, 40, 30, 40, 30, 40, 60]);
+  vibe([70, 50, 70, 50, 70, 50, 140]);
   updateHUD();
 }
 function sfx666() {
@@ -509,7 +509,7 @@ function applyBonus(p) {
     popups.push({ x: p.x, z: p.z, t: 0, dy: 55, color: '#e8890c', text: '🎁 总分翻倍！' });
   }
   sfxBonus();
-  vibe([40, 50, 40, 50, 90]);
+  vibe([90, 60, 90, 60, 180]);
   updateHUD();
 }
 function drawGanma() {
