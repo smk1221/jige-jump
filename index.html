@@ -24,6 +24,12 @@
     font-size: 20px; background: rgba(255,255,255,.75); border: none; border-radius: 12px;
     width: 42px; height: 42px; cursor: pointer; box-shadow: 0 2px 8px rgba(60,74,102,.15);
   }
+  #lives {
+    position: fixed; top: 72px; right: 20px; z-index: 5;
+    background: rgba(255,255,255,.8); border-radius: 999px; padding: 7px 14px;
+    font-size: 14px; font-weight: 800; color: #e8890c;
+    box-shadow: 0 2px 8px rgba(60,74,102,.15); transition: opacity .3s; pointer-events: none;
+  }
   #hint {
     position: fixed; bottom: 36px; left: 50%; transform: translateX(-50%); z-index: 5;
     background: rgba(255,255,255,.7); padding: 8px 18px; border-radius: 20px;
@@ -75,6 +81,7 @@
   <div id="combo"></div>
 </div>
 <button id="snd" title="声音开关">🔊</button>
+<div id="lives" class="hidden"></div>
 <div id="hint">按住蓄力 · 松开起跳（也可用空格键）</div>
 <div id="overlay"><div class="card" id="card"></div></div>
 
@@ -90,6 +97,7 @@ const hintEl = document.getElementById('hint');
 const overlayEl = document.getElementById('overlay');
 const cardEl = document.getElementById('card');
 const sndBtn = document.getElementById('snd');
+const livesEl = document.getElementById('lives');
 
 let W = 0, H = 0, skyGrad = null;
 function resize() {
@@ -133,6 +141,27 @@ try { playerName = localStorage.getItem('jige-name') || ''; } catch (e) {}
 let streak = 0;    // 连续成功跳跃次数
 let ganmaT = -1;   // 字幕计时（-1 = 未激活）
 let shakeT = 0;    // 屏幕抖动剩余时长
+
+// 复活与 666 特效
+let revives = 0;        // 剩余复活次数（连跳 6 次 / 🎁 大奖获得，局内累计）
+let six6T = -1;         // 「666」字幕计时
+let reviveFlag = false; // 本次坠落将触发复活
+
+// 手机马达震动
+let vibeTimer = null;
+function vibe(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
+function startChargeVibe() {
+  if (!navigator.vibrate) return;
+  stopChargeVibe();
+  vibeTimer = setInterval(() => {
+    const power = Math.min(1, (performance.now() - chargeStart) / CHARGE_MS);
+    vibe(Math.round(8 + power * 42)); // 蓄力越满，脉冲越长，震感越强
+  }, 90);
+}
+function stopChargeVibe() {
+  if (vibeTimer) { clearInterval(vibeTimer); vibeTimer = null; }
+  vibe(0);
+}
 const cam = { x: 0, y: 0 };
 const chick = {
   x: 0, z: 0, y: 0, vx: 0, vz: 0, vy: 0,
@@ -151,20 +180,29 @@ function px(x, z) { return rawX(x, z) - cam.x + W / 2; }
 function py(x, z, y) { return rawY(x, z) - (y || 0) - cam.y + H * 0.52; }
 
 // ================= 平台 =================
-function makePlatform(x, z, size) {
+function makePlatform(x, z, size, allowBonus) {
   const hue = HUES[(Math.random() * HUES.length) | 0];
+  const bonus = allowBonus !== false && Math.random() < 0.12;
   let deco = null;
   const r = Math.random();
   if (r < 0.28) deco = DECOS[(Math.random() * DECOS.length) | 0];
   else if (r < 0.38) deco = '坤';
-  return {
+  const p = {
     x, z, size,
     type: Math.random() < 0.32 ? 'cyl' : 'box',
     top: `hsl(${hue},65%,74%)`,
     right: `hsl(${hue},48%,60%)`,
     left: `hsl(${hue},48%,49%)`,
-    deco
+    deco,
+    bonus
   };
+  if (bonus) { // 金色 Bonus 格：跳正中有大奖
+    p.top = 'hsl(46,95%,66%)';
+    p.right = 'hsl(42,85%,52%)';
+    p.left = 'hsl(38,80%,42%)';
+    p.deco = '🎁';
+  }
+  return p;
 }
 function genNext() {
   const last = platforms[platforms.length - 1];
@@ -191,10 +229,11 @@ function focusPoint() {
   return { x: rawX(fx, fz), y: rawY(fx, fz) };
 }
 function resetWorld() {
-  platforms = [makePlatform(0, 0, 60)];
+  platforms = [makePlatform(0, 0, 60, false)];
   platforms[0].deco = null;
   score = 0; combo = 0; popups = [];
   streak = 0; ganmaT = -1; shakeT = 0;
+  revives = 0; six6T = -1; reviveFlag = false;
   Object.assign(chick, {
     x: 0, z: 0, y: 0, vx: 0, vz: 0, vy: 0, tx: 0, tz: 0,
     plat: 0, state: 'idle', squash: 0, angle: 0, deadT: 0
@@ -242,8 +281,8 @@ function menuCard() {
     '<div class="big">🐔</div><h1>鸡哥跳一跳</h1>' +
     '<p class="sub">唱、跳、RAP、篮球 🏀</p>' +
     (playerName
-      ? '<p class="tip">欢迎回来，<b>' + escapeHtml(playerName) + '</b>（<a href="#" data-action="rename">换昵称</a>）<br>按住屏幕或空格键蓄力，松开起跳<br>正中心 Perfect 三倍分，连击逐级递增！</p>'
-      : '<p class="tip">游客登录：起个昵称就能上榜比拼<br>按住蓄力，松开起跳，正中心三倍分！</p>' +
+      ? '<p class="tip">欢迎回来，<b>' + escapeHtml(playerName) + '</b>（<a href="#" data-action="rename">换昵称</a>）<br>按住蓄力松开跳，正中心 Perfect 三倍分<br>连跳 6 次得 🐣 复活；金色 🎁 格跳正中有大奖！</p>'
+      : '<p class="tip">游客登录：起个昵称就能上榜比拼<br>按住蓄力松开跳，正中心三倍分<br>连跳 6 次得 🐣 复活；金色 🎁 格跳正中有大奖！</p>' +
         '<input id="nameInput" maxlength="12" placeholder="输入你的昵称">') +
     '<button data-action="start">开始游戏</button>' +
     '<button data-action="board" class="ghost">🏆 排行榜</button>';
@@ -305,6 +344,12 @@ function updateHUD() {
   scoreEl.textContent = score;
   bestEl.textContent = '最高 ' + Math.max(best, score);
   comboEl.textContent = combo >= 1 ? 'Perfect ×' + combo + ' 鸡你太美！' : '';
+  if (revives > 0 && mode === 'playing') {
+    livesEl.textContent = '🐣 复活 ×' + revives;
+    livesEl.classList.remove('hidden');
+  } else {
+    livesEl.classList.add('hidden');
+  }
   scoreEl.classList.remove('pop');
   void scoreEl.offsetWidth;
   scoreEl.classList.add('pop');
@@ -326,6 +371,7 @@ function jump(power) {
   chick.flip = dz > dx;
   chick.squash = -0.28; // 起跳拉伸
   sfx('jump');
+  vibe(25);
   hintEl.classList.add('hidden');
 }
 function land() {
@@ -350,6 +396,7 @@ function land() {
       chick.tx = p.x; chick.tz = p.z; // 吸附到平台正中心
       popups.push({ x: p.x, z: p.z, t: 0, dy: 28, color: '#ff5f8f', text: PERFECT_TEXTS[(Math.random() * PERFECT_TEXTS.length) | 0] });
       sfx('perfect');
+      vibe([20, 30, 45]);
     } else {
       combo = 0;
       gain = crossed;
@@ -364,11 +411,14 @@ function land() {
         chick.tz = Math.max(p.z - inset, Math.min(p.z + inset, chick.z));
       }
       sfx('land');
+      vibe(15);
     }
     score += gain;
     popups.push({ x: chick.x, z: chick.z, t: 0, dy: 0, color: d < 7 ? '#f7b500' : '#5a6b8c', text: '+' + gain });
+    if (d < 7 && p.bonus) applyBonus(p); // 金色格正中：大奖
     streak++;
-    if (streak % 4 === 0) triggerGanma(); // 每连跳成功 4 次来一下
+    if (streak % 6 === 0) trigger666();        // 连跳成功 6 次：666 + 复活
+    else if (streak % 4 === 0) triggerGanma(); // 连跳成功 4 次：哎呦你干嘛
     while (platforms.length - 1 < chick.plat + 1) genNext();
     chick.flip = facingOf();
   } else {
@@ -376,38 +426,91 @@ function land() {
     streak = 0;
     chick.tx = chick.x; chick.tz = chick.z;
     sfx('land');
+    vibe(15);
   }
   updateHUD();
 }
 function die() {
+  if (revives > 0) { revives--; reviveFlag = true; } // 有复活次数：坠落后原地复活
   chick.state = 'dead';
   chick.deadT = 0;
   chick.vy *= 0.35;
   combo = 0;
   streak = 0;
   sfx('fall');
+  vibe([90, 60, 120]);
+  updateHUD();
+}
+function doRevive() {
+  reviveFlag = false;
+  const p = platforms[chick.plat];
+  Object.assign(chick, {
+    x: p.x, z: p.z, tx: p.x, tz: p.z, y: 300,
+    vx: 0, vz: 0, vy: 0, angle: 0, deadT: 0,
+    state: 'fly', flightT: 0, flightDur: 0.5, dirSign: 1
+  });
+  popups.push({ x: p.x, z: p.z, t: 0, dy: 40, color: '#2ecc71', text: '🐣 复活！继续跳！' });
+  sfxBonus();
+  vibe([30, 60, 30]);
   updateHUD();
 }
 
-// ============ 「哎呦你干嘛」干扰特效 ============
-function triggerGanma() {
-  ganmaT = 0;
-  shakeT = 0.7;
-  sfxGanma();
-}
-function sfxGanma() {
+// ============ 特效：哎呦你干嘛 / 666复活 / Bonus大奖 ============
+function speak(text, rate, pitch) {
   if (muted) return;
   try {
     if (window.speechSynthesis) {
-      const u = new SpeechSynthesisUtterance('哎呦！你干嘛！');
-      u.lang = 'zh-CN'; u.rate = 1.3; u.pitch = 1.6; u.volume = 1;
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'zh-CN'; u.rate = rate || 1.2; u.pitch = pitch || 1.4; u.volume = 1;
       speechSynthesis.cancel();
       speechSynthesis.speak(u);
     }
   } catch (e) {}
+}
+function triggerGanma() {
+  ganmaT = 0;
+  shakeT = 0.7;
+  sfxGanma();
+  vibe([50, 40, 50, 40, 80]);
+}
+function sfxGanma() {
+  if (muted) return;
+  speak('哎呦！你干嘛！', 1.3, 1.6);
   // 滑稽滑音打底（无中文语音引擎时也有声）
   tone(880, 0.18, 'sawtooth', 0.12, 300);
   setTimeout(() => tone(400, 0.3, 'sawtooth', 0.14, 900), 180);
+}
+function trigger666() {
+  revives++;
+  six6T = 0;
+  sfx666();
+  vibe([30, 40, 30, 40, 30, 40, 60]);
+  updateHUD();
+}
+function sfx666() {
+  if (muted) return;
+  speak('六六六！', 1.5, 1.5);
+  tone(660, 0.1, 'square', 0.1);
+  setTimeout(() => tone(880, 0.1, 'square', 0.1), 110);
+  setTimeout(() => tone(1320, 0.2, 'square', 0.12), 220);
+}
+function sfxBonus() {
+  if (muted) return;
+  tone(784, 0.1, 'sine', 0.15);
+  setTimeout(() => tone(988, 0.1, 'sine', 0.15), 100);
+  setTimeout(() => tone(1319, 0.22, 'sine', 0.16), 200);
+}
+function applyBonus(p) {
+  if (Math.random() < 0.5) {
+    revives++;
+    popups.push({ x: p.x, z: p.z, t: 0, dy: 55, color: '#2ecc71', text: '🎁 复活 +1！' });
+  } else {
+    score *= 2;
+    popups.push({ x: p.x, z: p.z, t: 0, dy: 55, color: '#e8890c', text: '🎁 总分翻倍！' });
+  }
+  sfxBonus();
+  vibe([40, 50, 40, 50, 90]);
+  updateHUD();
 }
 function drawGanma() {
   if (ganmaT < 0) return;
@@ -431,6 +534,33 @@ function drawGanma() {
   ctx.fillText('哎呦你干嘛～', 0, 0);
   ctx.restore();
 }
+function draw666() {
+  if (six6T < 0) return;
+  const t = six6T;
+  const inT = Math.min(1, t / 0.15);
+  const out = t > 1.25 ? Math.max(0, 1 - (t - 1.25) / 0.4) : 1;
+  const size = Math.min(84, W / 6);
+  const s = (0.5 + inT * 0.5) * (1 + Math.sin(t * 12) * 0.04);
+  ctx.save();
+  ctx.globalAlpha = out;
+  ctx.translate(W / 2, H * 0.28);
+  ctx.scale(s, s);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '900 ' + size + 'px -apple-system, "PingFang SC", sans-serif';
+  ctx.lineWidth = 12;
+  ctx.strokeStyle = '#fff';
+  ctx.strokeText('666', 0, 0);
+  ctx.fillStyle = '#f7b500';
+  ctx.fillText('666', 0, 0);
+  const sub = Math.round(size * 0.28);
+  ctx.font = '800 ' + sub + 'px -apple-system, "PingFang SC", sans-serif';
+  ctx.lineWidth = 6;
+  ctx.strokeText('获得复活机会 ×1！', 0, size * 0.78);
+  ctx.fillStyle = '#3c4a66';
+  ctx.fillText('获得复活机会 ×1！', 0, size * 0.78);
+  ctx.restore();
+}
 
 // ================= 输入 =================
 function pressStart() {
@@ -439,11 +569,13 @@ function pressStart() {
   chargeStart = performance.now();
   chick.state = 'charge';
   startChargeSound();
+  startChargeVibe();
 }
 function pressEnd() {
   if (!charging) return;
   charging = false;
   stopChargeSound();
+  stopChargeVibe();
   if (mode !== 'playing' || chick.state !== 'charge') return;
   const power = Math.min(1, (performance.now() - chargeStart) / CHARGE_MS);
   jump(Math.max(power, 0.08));
@@ -452,6 +584,7 @@ function cancelCharge() {
   if (!charging) return;
   charging = false;
   stopChargeSound();
+  stopChargeVibe();
   if (chick.state === 'charge') chick.state = 'idle';
 }
 canvas.addEventListener('pointerdown', e => { ensureAC(); pressStart(); e.preventDefault(); });
@@ -587,7 +720,10 @@ function update(now, dt) {
     chick.y += chick.vy * dt;
     chick.vy -= G * dt;
     chick.angle += chick.dirSign * dt * 3;
-    if (chick.y < -360 && mode === 'playing') showGameOver();
+    if (chick.y < -360 && mode === 'playing') {
+      if (reviveFlag) doRevive();
+      else showGameOver();
+    }
   }
   const f = focusPoint();
   cam.x += (f.x - cam.x) * Math.min(1, dt * 4);
@@ -595,6 +731,7 @@ function update(now, dt) {
   for (const p of popups) p.t += dt;
   popups = popups.filter(p => p.t < 1.15);
   if (ganmaT >= 0) { ganmaT += dt; if (ganmaT > 1.5) ganmaT = -1; }
+  if (six6T >= 0) { six6T += dt; if (six6T > 1.65) six6T = -1; }
   if (shakeT > 0) shakeT = Math.max(0, shakeT - dt);
 }
 
@@ -656,6 +793,17 @@ function drawPlatform(p, sink) {
     ctx.fill();
   }
   const tx = px(p.x, p.z), ty = py(p.x, p.z, h);
+  if (p.bonus) { // 金色格：扩散脉冲光环提示
+    const pulse = (performance.now() / 900) % 1;
+    const rr = 6 + pulse * p.size;
+    ctx.globalAlpha = (1 - pulse) * 0.6;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.ellipse(tx, ty, rr * 1.225, rr * 0.707, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
   if (p.deco) {
     ctx.font = '600 ' + Math.max(16, Math.round(p.size * 0.8)) + 'px -apple-system, "PingFang SC", sans-serif';
     ctx.textAlign = 'center';
@@ -741,25 +889,30 @@ function drawChick() {
   ctx.ellipse(0, -30, 17, 23, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // 背带裤（下半身牛仔）
+  // 背带裤（黑白配色）
   ctx.save();
   ctx.beginPath();
   ctx.ellipse(0, -30, 17, 23, 0, 0, Math.PI * 2);
   ctx.clip();
-  ctx.fillStyle = '#4A6CD4';
+  ctx.fillStyle = '#26262b'; // 黑色裤身
   ctx.fillRect(-20, -26, 40, 22);
+  ctx.strokeStyle = '#f5f5f5'; // 白色腰线
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-18, -24); ctx.lineTo(18, -24);
+  ctx.stroke();
   ctx.restore();
-  // 背带
-  ctx.strokeStyle = '#3F5CC0';
+  // 背带（黑带白扣）
+  ctx.strokeStyle = '#1b1b20';
   ctx.lineWidth = 4.5;
   ctx.beginPath();
   ctx.moveTo(-8, -25); ctx.lineTo(-9, -41);
   ctx.moveTo(8, -25); ctx.lineTo(9, -41);
   ctx.stroke();
-  ctx.fillStyle = '#F7B500';
+  ctx.fillStyle = '#ffffff';
   ctx.beginPath();
-  ctx.arc(-8, -26, 1.8, 0, Math.PI * 2);
-  ctx.arc(8, -26, 1.8, 0, Math.PI * 2);
+  ctx.arc(-8, -26, 1.9, 0, Math.PI * 2);
+  ctx.arc(8, -26, 1.9, 0, Math.PI * 2);
   ctx.fill();
 
   // 右翅膀
@@ -852,6 +1005,7 @@ function render() {
   drawPopups();
   ctx.restore();
   drawGanma();
+  draw666();
 }
 
 // ================= 主循环 =================
