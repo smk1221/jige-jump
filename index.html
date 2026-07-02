@@ -52,6 +52,19 @@
     box-shadow: 0 6px 16px rgba(255,120,84,.4);
   }
   .card button:active { transform: scale(.96); }
+  .card button.ghost { background: #eef1f7; color: #3c4a66; box-shadow: none; margin-left: 10px; }
+  .card input {
+    display: block; width: 100%; margin: 0 0 16px; padding: 12px 14px;
+    font-size: 16px; border: 2px solid #dfe6f0; border-radius: 12px;
+    outline: none; text-align: center; font-family: inherit;
+  }
+  .card input:focus { border-color: #ffb02e; }
+  .card a { color: #4a6cd4; text-decoration: none; }
+  .card .lb { max-height: 190px; overflow-y: auto; margin: 0 0 16px; font-size: 14px; color: #3c4a66; }
+  .card .lb > div { display: flex; gap: 10px; padding: 5px 10px; border-radius: 8px; align-items: center; }
+  .card .lb > div > span:first-child { width: 28px; text-align: center; }
+  .card .lb > div > span:nth-child(2) { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .lb > div.me { background: #fff3d6; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -110,6 +123,16 @@ let platforms = [];
 let score = 0, combo = 0;
 let best = 0;
 try { best = +(localStorage.getItem('jige-best') || 0); } catch (e) {}
+
+// 云端排行榜（kvdb.io 免费存储桶）
+const LB_URL = 'https://kvdb.io/YRApdRcXyGJE2peSHFzN3n';
+let playerName = '';
+try { playerName = localStorage.getItem('jige-name') || ''; } catch (e) {}
+
+// 「哎呦你干嘛」干扰特效
+let streak = 0;    // 连续成功跳跃次数
+let ganmaT = -1;   // 字幕计时（-1 = 未激活）
+let shakeT = 0;    // 屏幕抖动剩余时长
 const cam = { x: 0, y: 0 };
 const chick = {
   x: 0, z: 0, y: 0, vx: 0, vz: 0, vy: 0,
@@ -171,6 +194,7 @@ function resetWorld() {
   platforms = [makePlatform(0, 0, 60)];
   platforms[0].deco = null;
   score = 0; combo = 0; popups = [];
+  streak = 0; ganmaT = -1; shakeT = 0;
   Object.assign(chick, {
     x: 0, z: 0, y: 0, vx: 0, vz: 0, vy: 0, tx: 0, tz: 0,
     plat: 0, state: 'idle', squash: 0, angle: 0, deadT: 0
@@ -200,18 +224,82 @@ function showGameOver() {
     '<div class="big">🎤</div><h1>哎哟，你干嘛～</h1>' +
     (isRecord ? '<div class="record">🏆 新纪录！</div>' : '') +
     '<div class="scoreline">' + score + '</div>' +
-    '<p class="tip">' + tag + '<br>最高纪录 ' + best + '</p>' +
-    '<button>再来一次</button>';
+    '<p class="tip">' + tag + '<br>' + (playerName ? escapeHtml(playerName) + ' 的' : '') + '最高纪录 ' + best + '</p>' +
+    '<div id="lbList" class="lb">榜单加载中…</div>' +
+    '<button data-action="start">再来一次</button>';
   overlayEl.classList.remove('hidden');
   updateHUD();
+  (async () => {
+    if (playerName && best > 0) await lbSubmit(playerName, best);
+    renderBoard();
+  })();
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 function menuCard() {
   cardEl.innerHTML =
     '<div class="big">🐔</div><h1>鸡哥跳一跳</h1>' +
     '<p class="sub">唱、跳、RAP、篮球 🏀</p>' +
-    '<p class="tip">按住屏幕或空格键蓄力，松开起跳<br>落在方块正中心触发 Perfect 三倍得分，连击逐级递增！</p>' +
-    '<button>开始游戏</button>';
+    (playerName
+      ? '<p class="tip">欢迎回来，<b>' + escapeHtml(playerName) + '</b>（<a href="#" data-action="rename">换昵称</a>）<br>按住屏幕或空格键蓄力，松开起跳<br>正中心 Perfect 三倍分，连击逐级递增！</p>'
+      : '<p class="tip">游客登录：起个昵称就能上榜比拼<br>按住蓄力，松开起跳，正中心三倍分！</p>' +
+        '<input id="nameInput" maxlength="12" placeholder="输入你的昵称">') +
+    '<button data-action="start">开始游戏</button>' +
+    '<button data-action="board" class="ghost">🏆 排行榜</button>';
   overlayEl.classList.remove('hidden');
+}
+function boardCard() {
+  cardEl.innerHTML =
+    '<div class="big">🏆</div><h1>最高纪录排行榜</h1>' +
+    '<div id="lbList" class="lb">加载中…</div>' +
+    '<button data-action="menu" class="ghost">返回</button>';
+  overlayEl.classList.remove('hidden');
+  renderBoard();
+}
+async function lbTop() {
+  const r = await fetch(LB_URL + '/?values=true&format=json', { cache: 'no-store' });
+  if (!r.ok) throw new Error('http ' + r.status);
+  const raw = await r.json();
+  const out = [];
+  for (const item of raw) {
+    try {
+      const v = JSON.parse(Array.isArray(item) ? item[1] : item.value);
+      if (v && v.n && typeof v.s === 'number') out.push({ n: String(v.n).slice(0, 12), s: Math.floor(v.s) });
+    } catch (e) {}
+  }
+  out.sort((a, b) => b.s - a.s);
+  return out;
+}
+async function lbSubmit(name, sc) {
+  try {
+    const cur = await fetch(LB_URL + '/' + encodeURIComponent(name), { cache: 'no-store' });
+    if (cur.ok) {
+      const v = await cur.json().catch(() => null);
+      if (v && v.s >= sc) return true; // 云端已有更高分，不覆盖
+    }
+    const r = await fetch(LB_URL + '/' + encodeURIComponent(name), {
+      method: 'PUT',
+      body: JSON.stringify({ n: name, s: sc, t: Date.now() })
+    });
+    return r.ok;
+  } catch (e) { return false; }
+}
+async function renderBoard() {
+  const el = document.getElementById('lbList');
+  if (!el) return;
+  try {
+    const list = await lbTop();
+    if (!document.getElementById('lbList')) return; // 卡片已切走
+    if (!list.length) { el.innerHTML = '还没有人上榜，快去创个纪录！'; return; }
+    el.innerHTML = list.slice(0, 20).map((r, i) => {
+      const medal = ['🥇', '🥈', '🥉'][i] || (i + 1) + '.';
+      return '<div' + (r.n === playerName ? ' class="me"' : '') + '><span>' + medal + '</span><span>' +
+        escapeHtml(r.n) + '</span><b>' + r.s + '</b></div>';
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '排行榜暂时连不上，稍后再试～';
+  }
 }
 function updateHUD() {
   scoreEl.textContent = score;
@@ -279,10 +367,13 @@ function land() {
     }
     score += gain;
     popups.push({ x: chick.x, z: chick.z, t: 0, dy: 0, color: d < 7 ? '#f7b500' : '#5a6b8c', text: '+' + gain });
+    streak++;
+    if (streak % 4 === 0) triggerGanma(); // 每连跳成功 4 次来一下
     while (platforms.length - 1 < chick.plat + 1) genNext();
     chick.flip = facingOf();
   } else {
     combo = 0;
+    streak = 0;
     chick.tx = chick.x; chick.tz = chick.z;
     sfx('land');
   }
@@ -293,8 +384,52 @@ function die() {
   chick.deadT = 0;
   chick.vy *= 0.35;
   combo = 0;
+  streak = 0;
   sfx('fall');
   updateHUD();
+}
+
+// ============ 「哎呦你干嘛」干扰特效 ============
+function triggerGanma() {
+  ganmaT = 0;
+  shakeT = 0.7;
+  sfxGanma();
+}
+function sfxGanma() {
+  if (muted) return;
+  try {
+    if (window.speechSynthesis) {
+      const u = new SpeechSynthesisUtterance('哎呦！你干嘛！');
+      u.lang = 'zh-CN'; u.rate = 1.3; u.pitch = 1.6; u.volume = 1;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(u);
+    }
+  } catch (e) {}
+  // 滑稽滑音打底（无中文语音引擎时也有声）
+  tone(880, 0.18, 'sawtooth', 0.12, 300);
+  setTimeout(() => tone(400, 0.3, 'sawtooth', 0.14, 900), 180);
+}
+function drawGanma() {
+  if (ganmaT < 0) return;
+  const t = ganmaT;
+  const inT = Math.min(1, t / 0.12);
+  const out = t > 1.15 ? Math.max(0, 1 - (t - 1.15) / 0.35) : 1;
+  const scale = (0.6 + inT * 0.4) * (1 + Math.sin(t * 30) * 0.05);
+  const size = Math.min(64, W / 8);
+  ctx.save();
+  ctx.globalAlpha = out;
+  ctx.translate(W / 2, H * 0.3);
+  ctx.rotate(Math.sin(t * 22) * 0.07);
+  ctx.scale(scale, scale);
+  ctx.font = '900 ' + size + 'px -apple-system, "PingFang SC", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = '#fff';
+  ctx.strokeText('哎呦你干嘛～', 0, 0);
+  ctx.fillStyle = '#ff2d78';
+  ctx.fillText('哎呦你干嘛～', 0, 0);
+  ctx.restore();
 }
 
 // ================= 输入 =================
@@ -324,10 +459,43 @@ window.addEventListener('pointerup', pressEnd);
 window.addEventListener('pointercancel', cancelCharge);
 window.addEventListener('blur', cancelCharge);
 window.addEventListener('keydown', e => {
+  if (e.target && e.target.tagName === 'INPUT') {
+    if (e.key === 'Enter') {
+      const btn = cardEl.querySelector('[data-action="start"]');
+      if (btn) btn.click();
+    }
+    return; // 输入昵称时不拦截按键
+  }
   if (e.code === 'Space' && !e.repeat) { ensureAC(); pressStart(); e.preventDefault(); }
 });
-window.addEventListener('keyup', e => { if (e.code === 'Space') pressEnd(); });
-overlayEl.addEventListener('click', e => { if (e.target.tagName === 'BUTTON') { ensureAC(); start(); } });
+window.addEventListener('keyup', e => {
+  if (e.target && e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') pressEnd();
+});
+overlayEl.addEventListener('click', e => {
+  const t = e.target.closest('[data-action]');
+  if (!t) return;
+  e.preventDefault();
+  const act = t.dataset.action;
+  if (act === 'start') {
+    const inp = document.getElementById('nameInput');
+    if (inp) {
+      const v = inp.value.trim().slice(0, 12);
+      if (!v) { inp.placeholder = '昵称不能为空哦～'; inp.focus(); return; }
+      playerName = v;
+      try { localStorage.setItem('jige-name', v); } catch (err) {}
+    }
+    ensureAC();
+    start();
+  } else if (act === 'rename') {
+    playerName = '';
+    menuCard();
+  } else if (act === 'board') {
+    boardCard();
+  } else if (act === 'menu') {
+    menuCard();
+  }
+});
 
 // ================= 音效 =================
 let ac = null, muted = false, chargeNodes = null;
@@ -426,6 +594,8 @@ function update(now, dt) {
   cam.y += (f.y - cam.y) * Math.min(1, dt * 4);
   for (const p of popups) p.t += dt;
   popups = popups.filter(p => p.t < 1.15);
+  if (ganmaT >= 0) { ganmaT += dt; if (ganmaT > 1.5) ganmaT = -1; }
+  if (shakeT > 0) shakeT = Math.max(0, shakeT - dt);
 }
 
 // ================= 绘制 =================
@@ -663,8 +833,13 @@ function drawPopups() {
   ctx.globalAlpha = 1;
 }
 function render() {
+  ctx.save();
+  if (shakeT > 0) {
+    const k = (shakeT / 0.7) * 14;
+    ctx.translate((Math.random() - 0.5) * 2 * k, (Math.random() - 0.5) * 2 * k);
+  }
   ctx.fillStyle = skyGrad;
-  ctx.fillRect(0, 0, W, H);
+  ctx.fillRect(-40, -40, W + 80, H + 80);
   drawClouds();
   const from = Math.max(0, chick.plat - 3);
   for (let i = platforms.length - 1; i >= from; i--) drawUnderShadow(platforms[i]);
@@ -675,6 +850,8 @@ function render() {
   drawFlyShadow();
   drawChick();
   drawPopups();
+  ctx.restore();
+  drawGanma();
 }
 
 // ================= 主循环 =================
