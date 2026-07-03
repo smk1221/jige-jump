@@ -86,7 +86,7 @@
 </div>
 <button id="snd" title="声音开关">🔊</button>
 <div id="lives" class="hidden"></div>
-<div id="ver">v3</div>
+<div id="ver">v4</div>
 <div id="hint">按住蓄力 · 松开起跳（也可用空格键）</div>
 <div id="overlay"><div class="card" id="card"></div></div>
 
@@ -137,8 +137,8 @@ let score = 0, combo = 0;
 let best = 0;
 try { best = +(localStorage.getItem('jige-best') || 0); } catch (e) {}
 
-// 云端排行榜（kvdb.io 免费存储桶）
-const LB_URL = 'https://kvdb.io/YRApdRcXyGJE2peSHFzN3n';
+// 云端排行榜（textdb.dev 免费文档存储，免注册）
+const LB_URL = 'https://textdb.dev/api/data/jige-jump-lb-smk1221-x7k2';
 let playerName = '';
 try { playerName = localStorage.getItem('jige-name') || ''; } catch (e) {}
 
@@ -302,30 +302,36 @@ function boardCard() {
   overlayEl.classList.remove('hidden');
   renderBoard();
 }
-async function lbTop() {
-  const r = await fetch(LB_URL + '/?values=true&format=json', { cache: 'no-store' });
+async function lbFetchDoc() {
+  const r = await fetch(LB_URL + '?t=' + Date.now(), { cache: 'no-store' });
   if (!r.ok) throw new Error('http ' + r.status);
-  const raw = await r.json();
+  const txt = await r.text();
+  let doc = null;
+  try { doc = JSON.parse(txt); } catch (e) {}
+  if (!doc || typeof doc.players !== 'object' || !doc.players) doc = { players: {} };
+  return doc;
+}
+async function lbTop() {
+  const doc = await lbFetchDoc();
   const out = [];
-  for (const item of raw) {
-    try {
-      const v = JSON.parse(Array.isArray(item) ? item[1] : item.value);
-      if (v && v.n && typeof v.s === 'number') out.push({ n: String(v.n).slice(0, 12), s: Math.floor(v.s) });
-    } catch (e) {}
+  for (const k in doc.players) {
+    const v = doc.players[k];
+    if (v && typeof v.s === 'number') out.push({ n: String(k).slice(0, 12), s: Math.floor(v.s) });
   }
   out.sort((a, b) => b.s - a.s);
   return out;
 }
 async function lbSubmit(name, sc) {
   try {
-    const cur = await fetch(LB_URL + '/' + encodeURIComponent(name), { cache: 'no-store' });
-    if (cur.ok) {
-      const v = await cur.json().catch(() => null);
-      if (v && v.s >= sc) return true; // 云端已有更高分，不覆盖
-    }
-    const r = await fetch(LB_URL + '/' + encodeURIComponent(name), {
-      method: 'PUT',
-      body: JSON.stringify({ n: name, s: sc, t: Date.now() })
+    const doc = await lbFetchDoc();
+    const cur = doc.players[name];
+    if (cur && cur.s >= sc) return true; // 云端已有更高分，不覆盖
+    doc.players[name] = { s: sc, t: Date.now() };
+    // text/plain 属于 CORS 简单请求，无需预检
+    const r = await fetch(LB_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(doc)
     });
     return r.ok;
   } catch (e) { return false; }
