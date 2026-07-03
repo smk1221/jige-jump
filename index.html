@@ -34,6 +34,12 @@
     position: fixed; left: 12px; bottom: 10px; z-index: 4;
     font-size: 11px; font-weight: 600; color: rgba(60,74,102,.45); pointer-events: none;
   }
+  #upd {
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 20;
+    background: #ff7854; color: #fff; font-weight: 700; font-size: 14px;
+    padding: 10px 20px; border-radius: 999px; border: none; cursor: pointer;
+    box-shadow: 0 6px 16px rgba(255,120,84,.45); transition: opacity .3s;
+  }
   #hint {
     position: fixed; bottom: 36px; left: 50%; transform: translateX(-50%); z-index: 5;
     background: rgba(255,255,255,.7); padding: 8px 18px; border-radius: 20px;
@@ -86,7 +92,8 @@
 </div>
 <button id="snd" title="声音开关">🔊</button>
 <div id="lives" class="hidden"></div>
-<div id="ver">v4</div>
+<div id="ver"></div>
+<button id="upd" class="hidden">🔄 发现新版本，点我更新</button>
 <div id="hint">按住蓄力 · 松开起跳（也可用空格键）</div>
 <div id="overlay"><div class="card" id="card"></div></div>
 
@@ -136,6 +143,9 @@ let platforms = [];
 let score = 0, combo = 0;
 let best = 0;
 try { best = +(localStorage.getItem('jige-best') || 0); } catch (e) {}
+
+// 版本号：每次发布 +1，用于左下角角标与新版本检测
+const GAME_VER = 5;
 
 // 云端排行榜（textdb.dev 免费文档存储，免注册）
 const LB_URL = 'https://textdb.dev/api/data/jige-jump-lb-smk1221-x7k2';
@@ -1028,6 +1038,20 @@ function frame(now) {
   render();
   requestAnimationFrame(frame);
 }
+
+// 版本角标 + 新版本检测（绕过缓存拉取线上页面比对版本号）
+document.getElementById('ver').textContent = 'v' + GAME_VER;
+const updEl = document.getElementById('upd');
+updEl.addEventListener('click', () => {
+  location.replace(location.pathname + '?v=' + Date.now()); // 换 URL 强制绕过缓存
+});
+(async () => {
+  try {
+    const r = await fetch(location.pathname + '?vc=' + Date.now(), { cache: 'no-store' });
+    const m = (await r.text()).match(/GAME_VER = (\d+)/);
+    if (m && +m[1] > GAME_VER) updEl.classList.remove('hidden');
+  } catch (e) {}
+})();
 
 // 启动
 resetWorld();
