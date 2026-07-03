@@ -30,6 +30,10 @@
     font-size: 14px; font-weight: 800; color: #e8890c;
     box-shadow: 0 2px 8px rgba(60,74,102,.15); transition: opacity .3s; pointer-events: none;
   }
+  #ver {
+    position: fixed; left: 12px; bottom: 10px; z-index: 4;
+    font-size: 11px; font-weight: 600; color: rgba(60,74,102,.45); pointer-events: none;
+  }
   #hint {
     position: fixed; bottom: 36px; left: 50%; transform: translateX(-50%); z-index: 5;
     background: rgba(255,255,255,.7); padding: 8px 18px; border-radius: 20px;
@@ -82,6 +86,7 @@
 </div>
 <button id="snd" title="声音开关">🔊</button>
 <div id="lives" class="hidden"></div>
+<div id="ver">v3</div>
 <div id="hint">按住蓄力 · 松开起跳（也可用空格键）</div>
 <div id="overlay"><div class="card" id="card"></div></div>
 
@@ -155,8 +160,9 @@ function startChargeVibe() {
   stopChargeVibe();
   vibeTimer = setInterval(() => {
     const power = Math.min(1, (performance.now() - chargeStart) / CHARGE_MS);
-    vibe(Math.round(20 + power * 90)); // 蓄力越满，脉冲越长，满蓄力时接近持续强震
-  }, 110);
+    // 半蓄力以上脉冲超过间隔 → 马达持续满转（网页震动无力度参数，这已是物理上限）
+    vibe(Math.round(30 + power * 170));
+  }, 120);
 }
 function stopChargeVibe() {
   if (vibeTimer) { clearInterval(vibeTimer); vibeTimer = null; }
@@ -371,7 +377,7 @@ function jump(power) {
   chick.flip = dz > dx;
   chick.squash = -0.28; // 起跳拉伸
   sfx('jump');
-  vibe(60);
+  vibe(100);
   hintEl.classList.add('hidden');
 }
 function land() {
@@ -396,7 +402,7 @@ function land() {
       chick.tx = p.x; chick.tz = p.z; // 吸附到平台正中心
       popups.push({ x: p.x, z: p.z, t: 0, dy: 28, color: '#ff5f8f', text: PERFECT_TEXTS[(Math.random() * PERFECT_TEXTS.length) | 0] });
       sfx('perfect');
-      vibe([40, 50, 90]);
+      vibe([80, 60, 150]);
     } else {
       combo = 0;
       gain = crossed;
@@ -426,7 +432,7 @@ function land() {
     streak = 0;
     chick.tx = chick.x; chick.tz = chick.z;
     sfx('land');
-    vibe(40);
+    vibe(70);
   }
   updateHUD();
 }
@@ -438,7 +444,7 @@ function die() {
   combo = 0;
   streak = 0;
   sfx('fall');
-  vibe([150, 80, 220]);
+  vibe([250, 100, 350]);
   updateHUD();
 }
 function doRevive() {
@@ -451,7 +457,7 @@ function doRevive() {
   });
   popups.push({ x: p.x, z: p.z, t: 0, dy: 40, color: '#2ecc71', text: '🐣 复活！继续跳！' });
   sfxBonus();
-  vibe([70, 90, 70]);
+  vibe([120, 100, 180]);
   updateHUD();
 }
 
@@ -471,7 +477,7 @@ function triggerGanma() {
   ganmaT = 0;
   shakeT = 0.7;
   sfxGanma();
-  vibe([100, 50, 100, 50, 180]);
+  vibe([180, 70, 180, 70, 300]);
 }
 function sfxGanma() {
   if (muted) return;
@@ -484,7 +490,7 @@ function trigger666() {
   revives++;
   six6T = 0;
   sfx666();
-  vibe([70, 50, 70, 50, 70, 50, 140]);
+  vibe([120, 60, 120, 60, 120, 60, 250]);
   updateHUD();
 }
 function sfx666() {
@@ -509,7 +515,7 @@ function applyBonus(p) {
     popups.push({ x: p.x, z: p.z, t: 0, dy: 55, color: '#e8890c', text: '🎁 总分翻倍！' });
   }
   sfxBonus();
-  vibe([90, 60, 90, 60, 180]);
+  vibe([150, 80, 150, 80, 300]);
   updateHUD();
 }
 function drawGanma() {
