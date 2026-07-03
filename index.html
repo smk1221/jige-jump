@@ -145,7 +145,7 @@ let best = 0;
 try { best = +(localStorage.getItem('jige-best') || 0); } catch (e) {}
 
 // 版本号：每次发布 +1，用于左下角角标与新版本检测
-const GAME_VER = 5;
+const GAME_VER = 6;
 
 // 云端排行榜（textdb.dev 免费文档存储，免注册）
 const LB_URL = 'https://textdb.dev/api/data/jige-jump-lb-smk1221-x7k2';
@@ -855,14 +855,6 @@ function drawFlyShadow() {
   ctx.ellipse(px(chick.x, chick.z), py(chick.x, chick.z, 0) + 3, r * 1.3, r * 0.5, 0, 0, Math.PI * 2);
   ctx.fill();
 }
-function drawBang() { // 一侧中分刘海（左），右侧镜像调用
-  ctx.beginPath();
-  ctx.moveTo(-1, -54);
-  ctx.bezierCurveTo(-9, -58, -16, -52, -17, -45);
-  ctx.bezierCurveTo(-12, -49, -5, -50, -1, -47);
-  ctx.closePath();
-  ctx.fill();
-}
 function drawChick() {
   const sink = chick.state === 'charge' ? chick.squash * 7 : 0;
   const fx = px(chick.x, chick.z);
@@ -898,96 +890,123 @@ function drawChick() {
   ctx.moveTo(6, -8); ctx.lineTo(6, 0);
   ctx.stroke();
 
-  // 左翅膀（身后）
-  ctx.fillStyle = '#FFD21E';
-  ctx.save();
-  ctx.translate(-17, -28); ctx.rotate(0.35);
-  ctx.beginPath(); ctx.ellipse(0, 0, 5, 9, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
+  // 篮球（身后左侧的大球）
+  ctx.fillStyle = '#b5651d';
+  ctx.strokeStyle = '#1c1c1e';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(-17, -22, 11, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(-17, -33); ctx.quadraticCurveTo(-11, -22, -17, -11);
+  ctx.moveTo(-27.5, -25); ctx.quadraticCurveTo(-17, -18, -6.5, -25);
+  ctx.stroke();
 
-  // 身体
-  ctx.fillStyle = '#FFE14D';
+  // 身体（黄色 + 描边）
+  ctx.fillStyle = '#FFD84D';
   ctx.beginPath();
   ctx.ellipse(0, -30, 17, 23, 0, 0, Math.PI * 2);
   ctx.fill();
+  ctx.strokeStyle = '#1c1c1e';
+  ctx.lineWidth = 2;
+  ctx.stroke();
 
-  // 背带裤（黑白配色）
+  // 黑色高领外套（白色衣缝 + 挂牌项链）
   ctx.save();
   ctx.beginPath();
   ctx.ellipse(0, -30, 17, 23, 0, 0, Math.PI * 2);
   ctx.clip();
-  ctx.fillStyle = '#26262b'; // 黑色裤身
-  ctx.fillRect(-20, -26, 40, 22);
-  ctx.strokeStyle = '#f5f5f5'; // 白色腰线
-  ctx.lineWidth = 2;
+  ctx.fillStyle = '#1d1d22';
+  ctx.fillRect(-20, -28, 40, 24);
+  ctx.strokeStyle = '#f2f2f5';
+  ctx.lineWidth = 2.4;
   ctx.beginPath();
-  ctx.moveTo(-18, -24); ctx.lineTo(18, -24);
+  ctx.moveTo(-9, -28); ctx.quadraticCurveTo(-6, -18, -3.5, -8);
+  ctx.moveTo(9, -28); ctx.quadraticCurveTo(6, -18, 3.5, -8);
   ctx.stroke();
-  ctx.restore();
-  // 背带（黑带白扣）
-  ctx.strokeStyle = '#1b1b20';
-  ctx.lineWidth = 4.5;
-  ctx.beginPath();
-  ctx.moveTo(-8, -25); ctx.lineTo(-9, -41);
-  ctx.moveTo(8, -25); ctx.lineTo(9, -41);
-  ctx.stroke();
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.arc(-8, -26, 1.9, 0, Math.PI * 2);
-  ctx.arc(8, -26, 1.9, 0, Math.PI * 2);
-  ctx.fill();
-
-  // 右翅膀
-  ctx.fillStyle = '#FFD21E';
-  ctx.save();
-  ctx.translate(17, -28); ctx.rotate(-0.35);
-  ctx.beginPath(); ctx.ellipse(0, 0, 5, 9, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-
-  // 篮球
-  ctx.fillStyle = '#E8722A';
-  ctx.beginPath(); ctx.arc(20, -22, 8, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#8A4513';
+  ctx.strokeStyle = '#c9cdd4';
   ctx.lineWidth = 1.2;
   ctx.beginPath();
-  ctx.arc(20, -22, 8, 0, Math.PI * 2);
-  ctx.moveTo(20, -30); ctx.quadraticCurveTo(24, -22, 20, -14);
-  ctx.moveTo(12.5, -24); ctx.quadraticCurveTo(20, -18, 27.5, -24);
+  ctx.moveTo(-5, -27); ctx.lineTo(0, -21);
+  ctx.moveTo(5, -27); ctx.lineTo(0, -21);
+  ctx.stroke();
+  ctx.fillStyle = '#e8ebf0';
+  ctx.fillRect(-1.8, -21, 3.6, 6);
+  ctx.strokeStyle = '#1c1c1e';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(-1.8, -21, 3.6, 6);
+  ctx.restore();
+
+  // 大红脸蛋
+  ctx.fillStyle = 'rgba(235,60,60,0.9)';
+  ctx.beginPath();
+  ctx.arc(-12.5, -34, 4.4, 0, Math.PI * 2);
+  ctx.arc(12.5, -34, 4.4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 大眼睛（白底黑瞳，右眼略高更神气）
+  ctx.fillStyle = '#fff';
+  ctx.strokeStyle = '#1c1c1e';
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.ellipse(-5.5, -40, 5, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(6, -41.5, 5.4, 6.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#111';
+  ctx.beginPath();
+  ctx.arc(-4, -39.5, 2.4, 0, Math.PI * 2);
+  ctx.arc(4.6, -41, 2.6, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 嘴（橙色 + 坏笑弧线）
+  ctx.fillStyle = '#F49A1B';
+  ctx.strokeStyle = '#1c1c1e';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.ellipse(0, -32.5, 4.6, 3.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-3, -31.5);
+  ctx.quadraticCurveTo(0, -29.5, 3, -31.5);
   ctx.stroke();
 
-  // 眼睛
-  ctx.fillStyle = '#26221f';
+  // 银灰色乱刘海（锯齿发梢盖到眼睛上沿）
+  ctx.fillStyle = '#cdd0d6';
+  ctx.strokeStyle = '#202024';
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.arc(-6, -43, 2.3, 0, Math.PI * 2);
-  ctx.arc(6, -43, 2.3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.beginPath();
-  ctx.arc(-5.2, -43.8, 0.8, 0, Math.PI * 2);
-  ctx.arc(6.8, -43.8, 0.8, 0, Math.PI * 2);
-  ctx.fill();
-
-  // 腮红
-  ctx.fillStyle = 'rgba(255,120,140,0.4)';
-  ctx.beginPath();
-  ctx.arc(-11, -37, 3, 0, Math.PI * 2);
-  ctx.arc(11, -37, 3, 0, Math.PI * 2);
-  ctx.fill();
-
-  // 嘴
-  ctx.fillStyle = '#F6A11F';
-  ctx.beginPath();
-  ctx.moveTo(-4.5, -38);
-  ctx.lineTo(0, -34.5);
-  ctx.lineTo(4.5, -38);
-  ctx.lineTo(0, -41);
+  ctx.moveTo(-20, -42);
+  ctx.quadraticCurveTo(-23, -57, -10, -62);
+  ctx.quadraticCurveTo(0, -66, 11, -61);
+  ctx.quadraticCurveTo(21, -56, 19, -42);
+  ctx.lineTo(15.5, -47);
+  ctx.lineTo(13, -38.5);
+  ctx.lineTo(9.5, -46);
+  ctx.lineTo(6, -39.5);
+  ctx.lineTo(2, -47);
+  ctx.lineTo(-2, -39);
+  ctx.lineTo(-5.5, -46);
+  ctx.lineTo(-9, -37.5);
+  ctx.lineTo(-12.5, -45);
+  ctx.lineTo(-16.5, -38.5);
   ctx.closePath();
   ctx.fill();
-
-  // 中分刘海
-  ctx.fillStyle = '#2a2a2a';
-  drawBang();
-  ctx.save(); ctx.scale(-1, 1); drawBang(); ctx.restore();
+  ctx.stroke();
+  // 高光发丝
+  ctx.strokeStyle = '#eef0f4';
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(-8, -58); ctx.quadraticCurveTo(-9, -50, -8.5, -44);
+  ctx.moveTo(1, -60); ctx.quadraticCurveTo(0.5, -52, 1.5, -45);
+  ctx.moveTo(9, -57); ctx.quadraticCurveTo(9.5, -50, 9, -44);
+  ctx.stroke();
 
   ctx.restore();
 }
